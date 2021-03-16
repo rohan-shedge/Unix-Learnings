@@ -1,0 +1,82 @@
+
+
+import org.apache.commons.lang3.StringUtils;
+import java.io.BufferedReader;
+import java.io.PrintWriter;
+import java.io.StringReader;
+import java.io.StringWriter;
+
+public class ClearingFileComparator {
+    private static final MaskingLogger LOGGER = MaskingLogger.getLogger(ClearingFileComparator.class);
+
+    public static boolean compare(String cdkFileContents, String bfpeFileContents) {
+        if (StringUtils.isBlank(cdkFileContents)) {
+            LOGGER.error("File is null or empty.");
+            return false;
+        }
+        if (StringUtils.isBlank(bfpeFileContents)) {
+            LOGGER.error("file is null or empty.");
+            return false;
+        }
+        cdkFileContents = ClearingFileComparator.removeDynamicData(cdkFileContents);
+        bfpeFileContents = ClearingFileComparator.removeDynamicData(bfpeFileContents);
+
+        try (BufferedReader cdkFileReader = new BufferedReader(new StringReader(cdkFileContents));
+             BufferedReader bfpeFileReader = new BufferedReader(new StringReader(bfpeFileContents));
+             StringWriter output = new StringWriter();
+             PrintWriter writer = new PrintWriter(output)) {
+
+            String cdkLine = cdkFileReader.readLine();
+            String bfpeLine = bfpeFileReader.readLine();
+            int lineCounter = 1;
+            while ((cdkLine != null) || (bfpeLine != null)) {
+                if (StringUtils.isNotBlank(cdkLine) && StringUtils.isNotBlank(bfpeLine)) {
+                    boolean diff = cdkLine.equals(bfpeLine);
+                    if (!diff) {
+                        writer.println();
+                        writer.print("\n\nFound diff on line no : ");
+                        writer.print(lineCounter);
+                        writer.print("\ncdk file contents  : " + cdkLine);
+                        writer.print("\nbfpe file contents : " + bfpeLine);
+                    }
+                } else if (StringUtils.isNotBlank(cdkLine)) {
+                    writer.println();
+                    writer.print("\n\nFound extra line in cdk file with line no : ");
+                    writer.print(lineCounter);
+                    writer.print("\ncdk file contents  : " + cdkLine);
+                } else if (StringUtils.isNotBlank(bfpeLine)) {
+                    writer.println();
+                    writer.print("\n\nFound extra line in bfpe file with line no : ");
+                    writer.print(lineCounter);
+                    writer.print("\nbfpe file contents : " + bfpeLine);
+                }
+                cdkLine = cdkFileReader.readLine();
+                bfpeLine = bfpeFileReader.readLine();
+                lineCounter++;
+            }
+            if (output.toString().length() > 0) {
+                LOGGER.warn(output.toString());
+                return false;
+            }
+        } catch (Exception e) {
+            LOGGER.error("Exception while comparing CDK & BFPE clearing files : " + e.getMessage());
+            return false;
+        }
+        return true;
+    }
+
+    public static String removeDynamicData(String content) {
+        if (StringUtils.isNotBlank(content)) {
+            content = content.replaceAll("\r\n", "\n");
+            content = content.replaceAll("\n\n", "\n");
+            content = replaceBetween(content, 310, 313, 3); // file sequence number in header
+        }
+        return content;
+    }
+
+    public static String replaceBetween(String fileContent, int start, int end, int length) {
+        String s1 = StringUtils.substring(fileContent, 0, start);
+        String s2 = StringUtils.substring(fileContent, end);
+        return StringUtils.defaultString(s1) + StringUtils.repeat("X", length) + StringUtils.defaultString(s2);
+    }
+}
